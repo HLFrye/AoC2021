@@ -28,17 +28,11 @@ def solve(input, output):
     key[8] = matches(has_length(7), unknowns)
     key[6] = matches(both(has_length(6), missing(key[1], 1)), unknowns)
     key[0] = matches(both(has_length(6), missing(key[4], 1)), unknowns)
-    # /\/\ or these
-    # \/\/ this might be wrong
     key[9] = matches(has_length(6), unknowns)
-    
-    # \/\/ this is wrong
-    key[2] = matches(both(has_length(5), missing(key[9], 1)), unknowns)
-    print(unknowns)
     key[3] = matches(both(has_length(5), missing(key[1], 0)), unknowns)
-    key[5] = matches(has_length(5), unknowns)
+    key[5] = matches(both(has_length(5), missing(key[6], 1)), unknowns)
+    key[2] = matches(has_length(5), unknowns)
 
-    print(key)
     assert len(unknowns) == 0
 
     result = 0
@@ -46,8 +40,6 @@ def solve(input, output):
         for outval, inval in key.items():
             if digit == inval:
                 result = result * 10 + outval
-            else: 
-                print(f"Didn't match {digit}")
     return result
 
 # five char digits: 2, 3, 5
@@ -66,5 +58,4 @@ with open("./day8.txt") as f:
     for line in f.readlines():
         [input, output] = line.split(" | ")
         count += solve(input, output)
-        exit()
 print(count)
