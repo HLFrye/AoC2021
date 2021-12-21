@@ -41,7 +41,7 @@ def translate(x):
             return [0xFF, 0xFF, 0xFF, 0xFF]
 
 
-path_colors = list(map(transform_color, Color("red").range_to(Color("violet"), 600)))
+path_colors = list(map(transform_color, Color("red").range_to(Color("violet"), 5000)))
 def path_translate(x):
     return path_colors[x]
 
@@ -90,6 +90,29 @@ class Graph:
 
         self.width = len(input[0])
         self.height = len(input)
+
+        def promote(x, amt):
+            new_x = x + amt
+            return (new_x % 10) + int(new_x / 10)
+
+        for y, row in enumerate(self.nodes):
+            addl_cells = []
+            for i in range(1, 5):
+                for x, node in enumerate(row):
+                    addl_cells.append(Node(x + self.width * i, y, promote(node.risk, i)))
+            row += addl_cells
+
+        addl_rows = []
+        for i in range(1, 5):
+            for y, row in enumerate(self.nodes):
+                addl_rows.append([])
+                for x, node in enumerate(row):
+                    addl_rows[-1].append(Node(x, y + self.height * i, promote(node.risk, i)))
+
+        self.nodes += addl_rows
+
+        self.width = len(self.nodes[0])
+        self.height = len(self.nodes)
 
         self.order = []
         for x in range(self.width):
