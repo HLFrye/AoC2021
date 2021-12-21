@@ -1,11 +1,23 @@
 from types import NoneType
+import types
 from PIL import Image
 from io import BytesIO
 from math import sqrt
 from dataclasses import dataclass
 from colour import Color
 
+def transform_color(color):
+    return [
+        int(color.rgb[0] * 255), 
+        int(color.rgb[1] * 255), 
+        int(color.rgb[2] * 255), 
+        0xFF
+    ]
+
+
+terrain_colors = list(map(transform_color, Color("black").range_to(Color("white"), 10)))
 def translate(x):
+    return terrain_colors[x]
     match x:
         case 0:
             return [0, 0, 0, 0xFF]
@@ -28,15 +40,8 @@ def translate(x):
         case 9:
             return [0xFF, 0xFF, 0xFF, 0xFF]
 
-def transform_color(color):
-    return [
-        int(color.rgb[0] * 255), 
-        int(color.rgb[1] * 255), 
-        int(color.rgb[2] * 255), 
-        0xFF
-    ]
 
-path_colors = list(map(transform_color, Color("red").range_to(Color("violet"), 430)))
+path_colors = list(map(transform_color, Color("red").range_to(Color("violet"), 600)))
 def path_translate(x):
     return path_colors[x]
 
@@ -58,12 +63,22 @@ def render(input, paths):
     image = Image.frombytes('RGBA', (width, height,), bytes(pixels), 'raw')
     return image
 
-@dataclass
 class Node:
     x: int
     y: int
     risk: int
-    dist: int | NoneType
+    dist: int | NoneType = None
+    came_from: NoneType = None
+    best_path_to: int | NoneType = None
+    est_best_path: int | NoneType = None
+
+    def __init__(self, x, y, risk):
+        self.x = x
+        self.y = y
+        self.risk = risk
+
+    def __str__(self):
+        return f"Node at ({self.x}, {self.y}), risk {self.risk}, best_path_to {self.best_path_to}, est_best_path {self.est_best_path}, dist {self.dist}"
 
 class Graph:
     def __init__(self, input):
@@ -71,7 +86,7 @@ class Graph:
         for y, row in enumerate(input):
             self.nodes.append([])
             for x, cell in enumerate(row):
-                self.nodes[-1].append(Node(x, y, cell, None))
+                self.nodes[-1].append(Node(x, y, cell))
 
         self.width = len(input[0])
         self.height = len(input)
@@ -85,7 +100,7 @@ class Graph:
             for y in range(0, 2):
                 print(f"{x}, {y} loaded as {self.nodes[y][x]}")
 
-        self.order.sort(key=lambda x: sqrt(x[0]**2 + x[1]**2))
+        self.order.sort(key=lambda x: x[0] + x[1])
         
         self.nodes[0][0].dist = 0
         self.images = [self.render()]
@@ -98,10 +113,12 @@ class Graph:
             for x in range(self.width):
                 if path is not None and (x, y) in path:
                     pixels += [0xFF, 0x00, 0x00, 0xFF]
-                elif self.nodes[y][x].dist is None:
-                    pixels += translate(self.nodes[y][x].risk)
-                else:
+                elif self.nodes[y][x].dist is not None:
                     pixels += path_translate(self.nodes[y][x].dist)
+                elif self.nodes[y][x].best_path_to is not None:
+                    pixels += path_translate(self.nodes[y][x].best_path_to)
+                else:
+                    pixels += translate(self.nodes[y][x].risk)
 
         image = Image.frombytes('RGBA', (self.width, self.height,), bytes(pixels), 'raw')
         return image
@@ -165,16 +182,80 @@ class Graph:
         path.reverse()
         print("Starting")
         for pt in path:
+            node = self.nodes[pt[1]][pt[0]]
+
             if iter < 10:
                 print(f"{pt} -> {node}")
-            node = self.nodes[pt[1]][pt[0]]
             count += node.risk
             iter += 1
 
+        print(node)
+
         # 402 is too high
-        # 393 is too high
+        # 398 is right
         print(count)
+        print(self.nodes[99][99].dist)
         print(self.nodes[-1][-1].dist)
+
+    def heuristic(self, node):
+        return (self.width - node.x - 1) * 1.75 + (self.height - node.y - 1) * 1.75
+
+    def path(self, node):
+        curr = node
+        output = []
+        while curr is not None:
+            output.append(curr)
+            curr = curr.came_from
+            print(curr)
+
+        output.reverse()
+
+        return output
+
+    def astar(self):
+        def remove(openset, node):
+            openset.remove(node)
+            # for i, x in enumerate(openset):
+            #     if x.x == node.x and x.y == node.y:
+            #         del openset[i]
+            #         return
+
+        openset = [self.nodes[0][0]]
+        openset[0].came_from = None
+        openset[0].best_path_to = 0
+        openset[0].est_best_path = self.heuristic(openset[0])
+        images = [self.render()]
+        count = 0
+        while len(openset) > 0:
+            count += 1
+            curr = min(openset, key=lambda x: x.est_best_path)
+            remove(openset, curr)
+
+            if curr.x == self.width - 1:
+                if curr.y == self.height - 1:
+                    print("Done")
+                    path = self.path(curr)
+                    
+                    images.append(self.render(list(map(lambda x: (x.x, x.y), path))))
+
+                    print(path[-1].best_path_to)
+                    print(sum(map(lambda x: x.risk, path[1:])))
+                    images[0].save("./day15.gif", save_all=True, append_images=images[1:], optimize=False, duration=100, loops=0)
+
+                    return path
+
+            for neighbor in self.get_neighbors(curr):
+                updated_best_path = curr.best_path_to + neighbor.risk
+                if neighbor.best_path_to is None or updated_best_path < neighbor.best_path_to:
+                    neighbor.est_best_path = updated_best_path + self.heuristic(neighbor)
+                    neighbor.came_from = curr
+                    neighbor.best_path_to = updated_best_path
+                    if neighbor not in openset:
+                        openset.append(neighbor)
+            if count % 100 == 0:
+                images.append(self.render())
+
+
 
 input = []
 with open("./day15.txt") as f:
@@ -182,4 +263,5 @@ with open("./day15.txt") as f:
         input.append(list(map(int, line.strip())))
 
 graph = Graph(input)
-graph.calculate_dists()
+graph.astar()
+# graph.calculate_dists()
